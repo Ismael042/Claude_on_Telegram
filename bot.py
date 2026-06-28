@@ -96,6 +96,9 @@ async def _send_output(text: str) -> None:
             if has_perm:
                 opts = _parse_menu_options(chunk)
                 if opts:
+                    # "1. Yes" is short/generic and often filtered by dedup — always inject it
+                    if not any(val == "1" for _, val in opts):
+                        opts.insert(0, ("1. Sim", "1"))
                     rows = [[InlineKeyboardButton(lbl, callback_data=f"perm:{val}") for lbl, val in opts[i:i+2]]
                             for i in range(0, min(len(opts), 6), 2)]
                 else:
@@ -241,6 +244,16 @@ async def cmd_compact(update: Update, context) -> None:
     await update.message.reply_text("📦 /compact enviado")
 
 
+async def cmd_reset(update: Update, context) -> None:
+    if not _is_authorized(update):
+        return
+    if not _session or not _session.is_alive:
+        await update.message.reply_text("Sem sessão ativa.")
+        return
+    _session.write("/clear\r")
+    await update.message.reply_text("🗑️ Histórico da conversa limpo (/clear)")
+
+
 async def handle_message(update: Update, context) -> None:
     global _waiting_for_dir, _waiting_for_perm_input
 
@@ -280,26 +293,21 @@ async def handle_callback(update: Update, context) -> None:
     data = query.data
 
     # ── agent selection ───────────────────────────────────────────────────────
-    if data == "agent:new":
-        _continue_mode = False
-        _waiting_for_dir = True
-        await query.edit_message_text("Em qual diretório deseja iniciar o Claude?")
-        return
-
-    if data == "agent:continue":
-        _continue_mode = True
+    if data in ("agent:new", "agent:continue"):
+        _continue_mode = data == "agent:continue"
         _pending_dirs = _load_recent()
         if not _pending_dirs:
             _waiting_for_dir = True
-            await query.edit_message_text("Nenhum diretório recente. Em qual deseja continuar?")
+            await query.edit_message_text("Em qual diretório deseja iniciar o Claude?")
             return
+        action = "continuar" if _continue_mode else "iniciar"
         keyboard = [
             [InlineKeyboardButton(d, callback_data=f"dir:{i}")]
             for i, d in enumerate(_pending_dirs)
         ]
         keyboard.append([InlineKeyboardButton("📁 Outro diretório...", callback_data="dir:other")])
         await query.edit_message_text(
-            "Selecione o projeto para continuar:",
+            f"Selecione o projeto para {action}:",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
         return
@@ -309,7 +317,8 @@ async def handle_callback(update: Update, context) -> None:
         suffix = data[4:]
         if suffix == "other":
             _waiting_for_dir = True
-            await query.edit_message_text("Em qual diretório deseja continuar?")
+            action = "continuar" if _continue_mode else "iniciar"
+            await query.edit_message_text(f"Em qual diretório deseja {action}?")
         else:
             cwd = _pending_dirs[int(suffix)]
             label = "continuado em" if _continue_mode else "iniciado em"
@@ -360,6 +369,7 @@ async def post_init(application: Application) -> None:
         BotCommand("esc", "Enviar tecla Escape"),
         BotCommand("interrupt", "Interromper execução (Ctrl+C)"),
         BotCommand("compact", "Comprimir contexto (/compact)"),
+        BotCommand("reset", "Limpar histórico da conversa (/clear)"),
     ])
 
     me = await application.bot.get_me()
@@ -381,6 +391,7 @@ def main() -> None:
     app.add_handler(CommandHandler("esc", cmd_esc))
     app.add_handler(CommandHandler("interrupt", cmd_interrupt))
     app.add_handler(CommandHandler("compact", cmd_compact))
+    app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CallbackQueryHandler(handle_callback))
 

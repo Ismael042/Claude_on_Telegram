@@ -1,6 +1,7 @@
 import os
 import re
 import threading
+import time
 
 import pyte
 from winpty import PtyProcess
@@ -9,6 +10,7 @@ import logger
 COLS = 220
 ROWS = 40
 FLUSH_DELAY = 0.6
+MAX_FLUSH_INTERVAL = 3.0  # force a flush mid-stream so long responses don't silently buffer
 
 _DECORATION = re.compile(r'^[\s─╴╸╌╎┄┅┆┇┈┉┊┋┌┐└┘├┤┬┴┼╭╮╰╯│▀▄█▌▐▗▖▝▘▙▛▜▟·•\-=]+$')
 
@@ -32,6 +34,7 @@ class PTYSession:
         # already emitted this turn — never re-emitted regardless of TUI scroll.
         self._turn_baseline: set[str] = set()
         self._turn_emitted: set[str] = set()
+        self._last_emit_time: float = 0.0
 
     def start(self) -> None:
         env = os.environ.copy()
@@ -61,6 +64,11 @@ class PTYSession:
     def _reset_timer(self) -> None:
         if self._flush_timer:
             self._flush_timer.cancel()
+        # Mid-stream forced flush: if Claude is streaming continuously and we
+        # haven't emitted anything in MAX_FLUSH_INTERVAL, flush now so the user
+        # sees intermediate output instead of silence for minutes.
+        if self._ready and time.time() - self._last_emit_time > MAX_FLUSH_INTERVAL:
+            self._flush()
         self._flush_timer = threading.Timer(FLUSH_DELAY, self._flush)
         self._flush_timer.daemon = True
         self._flush_timer.start()
@@ -97,6 +105,7 @@ class PTYSession:
             lines.append(new)
         self._prev = current[:]
         if lines:
+            self._last_emit_time = time.time()
             self._turn_emitted.update(lines)
             self._on_output('\n'.join(lines))
 
