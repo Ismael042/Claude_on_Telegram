@@ -27,7 +27,11 @@ class PTYSession:
         self._stream = pyte.Stream(self._screen)
         self._prev: list[str] = [''] * ROWS
         self._first_flush = True
-        self._ready = False  # True after Claude shows ❯ prompt (suppresses --continue replay)
+        self._ready = False
+        # Per-turn deduplication: content visible before the user's message or
+        # already emitted this turn — never re-emitted regardless of TUI scroll.
+        self._turn_baseline: set[str] = set()
+        self._turn_emitted: set[str] = set()
 
     def start(self) -> None:
         env = os.environ.copy()
@@ -64,32 +68,47 @@ class PTYSession:
     def _flush(self) -> None:
         with self._lock:
             current = [self._screen.display[i].strip() for i in range(ROWS)]
+
         if self._first_flush:
             self._first_flush = False
             self._prev = current[:]
+            self._turn_baseline.update(r for r in current if r)
             return
+
         if not self._ready:
             for row in current:
-                if row.startswith('❯'):
+                if row.startswith('❯') or '? for shortcuts' in row:
                     self._ready = True
-                    self._prev = current[:]  # baseline after startup
+                    self._prev = current[:]
+                    self._turn_baseline.update(r for r in current if r)
                     break
             if not self._ready:
                 self._prev = current[:]
                 return
+
         lines = []
         for old, new in zip(self._prev, current):
             if new == old or not new:
                 continue
             if _DECORATION.match(new) or new.startswith('❯'):
                 continue
+            if new in self._turn_baseline or new in self._turn_emitted:
+                continue
             lines.append(new)
         self._prev = current[:]
         if lines:
+            self._turn_emitted.update(lines)
             self._on_output('\n'.join(lines))
 
     def write(self, text: str) -> None:
         if self._proc and self._running:
+            with self._lock:
+                current = [self._screen.display[i].strip() for i in range(ROWS)]
+            self._prev = current[:]
+            # Merge current screen + previous turn's emitted lines into the new
+            # baseline so none of it reappears as "new" in the next response.
+            self._turn_baseline = {r for r in current if r} | self._turn_emitted
+            self._turn_emitted = set()
             self._proc.write(text)
 
     def stop(self) -> None:
