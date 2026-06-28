@@ -27,6 +27,7 @@ class PTYSession:
         self._stream = pyte.Stream(self._screen)
         self._prev: list[str] = [''] * ROWS
         self._first_flush = True
+        self._ready = False  # True after Claude shows ❯ prompt (suppresses --continue replay)
 
     def start(self) -> None:
         env = os.environ.copy()
@@ -67,6 +68,15 @@ class PTYSession:
             self._first_flush = False
             self._prev = current[:]
             return
+        if not self._ready:
+            for row in current:
+                if row.startswith('❯'):
+                    self._ready = True
+                    self._prev = current[:]  # baseline after startup
+                    break
+            if not self._ready:
+                self._prev = current[:]
+                return
         lines = []
         for old, new in zip(self._prev, current):
             if new == old or not new:
