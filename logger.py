@@ -17,6 +17,7 @@ def msg_sent(chars: int)     -> None: _log.debug("📤 Enviado (%d chars)", char
 def perm_prompt()            -> None: _log.info("🔐 Prompt de permissão detectado")
 def unauthorized(uid: int)   -> None: _log.warning("🚫 Acesso negado — user_id=%d", uid)
 def pty_exit()               -> None: _log.info("💀 PTY encerrou")
+def pty_start(pid)           -> None: _log.info("🟡 PTY iniciado — PID=%s", pid)
 def send_error(err: Exception) -> None: _log.error("📵 Falha ao enviar: %s", err)
 
 

@@ -1,5 +1,6 @@
 import os
 import re
+import subprocess
 import threading
 import time
 
@@ -43,6 +44,7 @@ class PTYSession:
             self._command, cwd=self._cwd, env=env, dimensions=(ROWS, COLS)
         )
         self._running = True
+        logger.pty_start(getattr(self._proc, "pid", "?"))
         self._thread = threading.Thread(target=self._read_loop, daemon=True)
         self._thread.start()
 
@@ -128,14 +130,26 @@ class PTYSession:
         if self._flush_timer:
             self._flush_timer.cancel()
         if self._proc:
+            pid = getattr(self._proc, "pid", None)
             try:
                 self._proc.write("/exit\r")
             except Exception:
                 pass
+            time.sleep(0.4)
             try:
                 self._proc.terminate()
             except Exception:
                 pass
+            # Force-kill the entire process tree so orphan node/claude processes don't linger
+            if pid:
+                try:
+                    subprocess.call(
+                        ["taskkill", "/F", "/T", "/PID", str(pid)],
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                        timeout=3,
+                    )
+                except Exception:
+                    pass
 
     @property
     def is_alive(self) -> bool:
