@@ -1,9 +1,12 @@
 import re
 
-_ANSI = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+_MULTI_BLANK = re.compile(r'\n{3,}')
+
 
 def strip_ansi(text: str) -> str:
-    return _ANSI.sub('', text)
+    # pyte already renders clean text; just collapse excessive blank lines
+    return _MULTI_BLANK.sub('\n\n', text)
+
 
 def chunk_text(text: str, max_len: int = 4000) -> list[str]:
     chunks = []
