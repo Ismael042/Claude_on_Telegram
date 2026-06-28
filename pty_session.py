@@ -118,6 +118,9 @@ class PTYSession:
             # baseline so none of it reappears as "new" in the next response.
             self._turn_baseline = {r for r in current if r} | self._turn_emitted
             self._turn_emitted = set()
+            # Force MAX_FLUSH_INTERVAL check on the very first chunk after this
+            # write, regardless of when the previous response ended.
+            self._last_emit_time = 0.0
             self._proc.write(text)
 
     def stop(self) -> None:
