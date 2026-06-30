@@ -8,6 +8,7 @@
 | PTY Windows | `pywinpty` v2 |
 | Strip ANSI | regex built-in |
 | Config | `python-dotenv` |
+| System tray | `pystray` + `Pillow` |
 | Runtime | Python 3.12+ / Windows 11 |
 
 ---
@@ -17,11 +18,16 @@
 ```
 Ponte Telegram Claude/
   bot.py              ← entry point; handlers Telegram + main loop
+  tray.py             ← system tray; gerencia processo do bot, viewer de logs
   pty_session.py      ← PTY lifecycle; spawn, write_stdin, read_stdout (thread)
   output_buffer.py    ← batching de output (400ms / 30 linhas → flush)
   formatter.py        ← strip ANSI, chunkar em 4096 chars
   config.py           ← carrega .env (TOKEN, ALLOWED_USER_ID, default dir)
+  logger.py           ← setup de logging com ícones por nível
+  install.ps1         ← registra tray.py no Agendador de Tarefas (logon)
+  uninstall.ps1       ← remove do agendador
   requirements.txt
+  logs/               ← NÃO commitado; bot.log com rotação a 2 MB
   .env                ← NÃO commitado
   .env.example
   .gitignore
@@ -62,10 +68,12 @@ Telegram User (mensagem em monospace)
 
 | Módulo | Responsabilidade |
 |---|---|
+| `bot` | Handlers Telegram, captura do event loop (`post_init`), roteamento I/O |
+| `tray` | System tray icon (pystray); inicia/para/reinicia `bot.py` como subprocesso; janela de logs tkinter com auto-refresh |
 | `PTYSession` | Spawn do processo em PTY, thread de leitura contínua, write ao stdin |
 | `OutputBuffer` | Batching com timer (400ms) e limite de linhas (30); thread-safe |
 | `formatter` | Strip de códigos ANSI; chunking para limite do Telegram (4000 chars) |
-| `bot` | Handlers Telegram, captura do event loop (`post_init`), roteamento I/O |
+| `logger` | Setup de logging com ícones por nível; saída em stdout (capturada pelo tray em `logs/bot.log`) |
 | `config` | Leitura de variáveis de ambiente via `.env` |
 
 ---
@@ -74,10 +82,30 @@ Telegram User (mensagem em monospace)
 
 | Ambiente | Descrição |
 |---|---|
-| Local (dev) | `python bot.py` direto no terminal |
-| Produção | Processo rodando em background no Windows (Task Scheduler ou NSSM) |
+| Dev | `python bot.py` direto no terminal |
+| Produção | `tray.py` via Agendador de Tarefas (`install.ps1`); sobe no logon, reinicia em crash, logs em `logs/bot.log` |
 
 Não há staging — é ferramenta pessoal de uso único.
+
+### Fluxo de produção
+
+```
+Windows logon
+    │
+    ▼
+Agendador de Tarefas → pythonw.exe tray.py
+    │
+    ▼
+tray.py (_monitor_loop, 15s delay inicial)
+    │  stdout + stderr
+    ├─► logs/bot.log  (rotação a 2 MB)
+    │
+    ▼
+python.exe bot.py  [PYTHONUNBUFFERED=1, PYTHONUTF8=1]
+    │
+    ▼
+(comportamento normal — ver fluxo de dados acima)
+```
 
 ---
 
