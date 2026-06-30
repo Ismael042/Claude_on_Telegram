@@ -2,3 +2,5 @@ python-telegram-bot==21.10
 pywinpty==2.0.14
 python-dotenv==1.0.1
 pyte==0.8.0
+pystray==0.19.5
+Pillow>=10.0.0
