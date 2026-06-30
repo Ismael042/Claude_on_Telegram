@@ -38,10 +38,44 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Edite o `.env` com suas credenciais (veja seção abaixo) e execute:
+Edite o `.env` com suas credenciais (veja seção abaixo).
+
+### Execução manual
 
 ```bash
 python bot.py
+```
+
+### Autostart com o Windows (recomendado)
+
+O projeto inclui um app de bandeja do sistema (`tray.py`) que gerencia o bot automaticamente:
+
+- Inicia o bot ao ligar o computador (via Agendador de Tarefas)
+- Reinicia automaticamente em caso de crash
+- Exibe ícone verde/vermelho na bandeja mostrando o status
+- Duplo clique no ícone abre o visualizador de logs
+
+**Para instalar** (rode uma vez, sem necessidade de admin):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+**Menu da bandeja** (clique direito no ícone):
+
+| Opção | Ação |
+|---|---|
+| Ver Logs | Abre janela com logs em tempo real (auto-refresh 3s) |
+| Reiniciar | Reinicia o processo do bot |
+| Pausar / Retomar | Para o bot sem desinstalar do agendador |
+| Sair | Encerra tray e bot |
+
+Os logs ficam em `logs/bot.log` (rotação automática a 2 MB).
+
+**Para remover do autostart:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File uninstall.ps1
 ```
 
 ## Configuração (`.env`)
